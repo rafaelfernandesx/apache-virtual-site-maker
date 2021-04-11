@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Apache Virtual Site</title>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <link rel="stylesheet" href="./assets/css/bootstrap.css">
+</head>
+
+<body style="background: #ffffff;">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm">
+                <table class="table table-sm">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>
+                                Server Alias
+                            </th>
+                            <th>
+                                Server Name
+                            </th>
+                            <th>
+                                Server Admin
+                            </th>
+                            <th>
+                                Document Root
+                            </th>
+                            </th>
+                            <th>
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="bodyTableVirtualSite">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <form id="formSite" style="display: none;">
+            <div class="row">
+                <div class="col-sm">
+                    <label for="serverName" class="form-label">Server Name</label>
+                    <input required type="text" class="form-control" id="serverName" placeholder="example.com">
+                </div>
+                <div class="col-sm">
+                    <label for="serverAlias" class="form-label">Server Alias</label>
+                    <input type="text" hidden id="filePath" value="">
+                    <input required type="text" class="form-control" id="serverAlias" placeholder="www.example.com">
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-sm">
+                    <label for="serverAdmin" class="form-label">Server Admin</label>
+                    <input required type="email" class="form-control" id="serverAdmin" placeholder="name@example.com">
+                </div>
+                <div class="col-sm">
+                    <label for="documentRoot" class="form-label">Document Root</label>
+                    <input required type="text" class="form-control" id="documentRoot" placeholder="/var/www/example.com">
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-sm d-flex justify-content-center">
+                    <button class="btn btn-success w-25" type="submit">Salvar</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <script>
+    window.addEventListener('DOMContentLoaded', () => {
+        console.log('carregado');
+    })
+
+        const fs = require('fs');
+        var virtualSites = [];
+        loadVirtualSites()
+        function loadVirtualSites() {
+            virtualSites = [];
+            const files = listFilesInDir();
+            const bodyTable = document.getElementById('bodyTableVirtualSite');
+            bodyTable.innerHTML = '';
+            files.forEach(function(file, index){
+                let data = readFile(file);
+                let json = '{';
+
+                data.split("\n").forEach(function(line, index){
+                    if (line.includes('ServerAdmin') ) {
+                        json += line.replace('ServerAdmin ', '"ServerAdmin": "') + '",';
+                    }
+                    if (line.includes('ServerName')) {
+                        json += line.replace('ServerName ', '"ServerName": "') + '",';
+                    }
+                    if (line.includes('ServerAlias')) {
+                        json += line.replace('ServerAlias ', '"ServerAlias": "') + '",';
+                    }
+                    if (line.includes('DocumentRoot')) {
+                        json += '"FilePath": ' + JSON.stringify(file) + ',';
+                        json += line.replace('DocumentRoot ', '"DocumentRoot": "') + '"';
+                    }
+
+                })
+                json += '}';
+                json = JSON.parse(json);
+                virtualSites.push(json);
+                const html = `
+                        <tr>
+                            <td>${json.ServerAlias}</td>
+                            <td>${json.ServerName}</td>
+                            <td>${json.ServerAdmin}</td>
+                            <td>${json.DocumentRoot}</td>
+                            <td>
+                                <button class="btn-edit btn btn-sm btn-warning" onclick="editVirtualSite(${index})">Edit</button>
+                                <button class="btn-delete btn btn-sm btn-danger" onclick="deleteVirtualSite(${index})">Delete</button>
+                            </td>
+                        </tr>`;
+                bodyTable.innerHTML = bodyTable.innerHTML + html;
+            });
+
+        }
+
+
+
+        document.getElementById('formSite').addEventListener('submit', function (e) {
+            e.preventDefault();
+            let serverAlias = document.getElementById('serverAlias');
+            let serverName = document.getElementById('serverName');
+            let serverAdmin = document.getElementById('serverAdmin');
+            let documentRoot = document.getElementById('documentRoot');
+            let filePath = document.getElementById('filePath');
+
+            const txt = `<VirtualHost *:80>
+    ServerAdmin ${serverAdmin.value}
+    ServerName ${serverName.value}
+    ServerAlias ${serverAlias.value}
+    DocumentRoot ${documentRoot.value}
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>`;
+            if (filePath.value.length > 2) {
+                renameFile(filePath.value, "C:\\Pasta\\" + serverName.value + '.conf')
+                saveVirtualSite(txt, "C:\\Pasta\\" + serverName.value + '.conf');
+                console.log('Site virtual atualizado!');
+            }else{
+                saveVirtualSite(txt, "C:\\Pasta\\" + serverName.value + '.conf');
+                console.log('Site virtual criado!');
+            }
+            serverAlias.value = '';
+            serverName.value = '';
+            serverAdmin.value = '';
+            documentRoot.value = '';
+            filePath.value = '';
+            loadVirtualSites();
+        })
+
+
+
+    function saveVirtualSite(txt, path) {
+        writeFile(txt, path);
+        // document.getElementById('formSite').style.display = 'none';
+    }
+    function editVirtualSite(index) {
+        document.getElementById('serverAlias').value = virtualSites[index].ServerAlias;
+        document.getElementById('serverName').value = virtualSites[index].ServerName;
+        document.getElementById('serverAdmin').value = virtualSites[index].ServerAdmin;
+        document.getElementById('documentRoot').value = virtualSites[index].DocumentRoot;
+        document.getElementById('filePath').value = virtualSites[index].FilePath;
+        document.getElementById('formSite').style.display = 'block';
+    }
+    function deleteVirtualSite(id) {
+        deleteFile()
+        console.log(id);
+    }
+
+    function writeFile(content, fileName = 'C:\\Pasta\\meuarquivo.txt') {
+        fs.writeFileSync(fileName, content, (err) => {
+            if (err) {
+                console.log("An error ocurred creating the file " + err.message)
+            }
+
+            console.log("Arquivo salvo");
+        });
+    }
+
+    function readFile(filePath = 'C:\\Pasta\\meuarquivo.txt') {
+        return fs.readFileSync(filePath, 'utf-8', function (err, data) {
+            if (err) {
+                return console.log(err);
+            }
+        });
+    }
+
+    function deleteFile(filePath = 'C:\\Pasta\\meuarquivo.txt') {
+        if (fs.existsSync(filePath)) {
+            fs.unlink(filePath, (err) => {
+                if (err) {
+                    console.log("An error ocurred updating the file" + err.message);
+                    console.log(err);
+                    return;
+                }
+                console.log("File succesfully deleted");
+            });
+        } else {
+            console.log("This file doesn't exist, cannot delete");
+        }
+    }
+
+    function renameFile(oldFileName, newFileName) {
+        fs.renameSync(oldFileName, newFileName, function (err) {
+            if (err) console.log('ERROR: ' + err);
+        });
+    }
+
+    function listFilesInDir(folder = 'C:\\Pasta') {
+        let files = [];
+        fs.readdirSync(folder).forEach(file => {
+            files.push(folder+'/'+file);
+        });
+        return files;
+    }
+    </script>
+</body>
+
+</html>
